@@ -1,0 +1,103 @@
+# ===========================================
+# IMPORTS
+# ===========================================
+
+import requests
+import pandas as pd
+
+# =========================================
+# CONFIGURATION
+# ========================================
+
+TEST_MODE = True  # Set to False for full download
+TEST_LIMIT = 100  # Limit for testing mode
+
+# ==========================================
+# API CONFIGURATION
+# ==========================================
+
+url = "https://gis.fdot.gov/arcgis/rest/services/sso/ssogis/FeatureServer/2022/query"
+
+# =========================================
+# DOWNLOAD OBJECT IDS
+# =========================================
+
+params = {
+    "where": "1=1",
+    "returnIdsOnly": "true",
+    "f": "json"
+}
+
+response = requests.get(url, params=params, timeout=60)
+data = response.json()
+
+data = response.json()
+object_ids = data["objectIds"]
+
+print("=" * 50)
+print("Florida Crash Downloader v1.0")
+print("=" * 50)
+
+print(f"Object IDs found: {len(object_ids):,}")
+
+# ==========================================
+# DOWNLOAD CRASH RECORDS
+# ==========================================
+
+all_crashes = []
+failed_downloads = []
+
+if TEST_MODE:
+    ids_to_download = object_ids[:TEST_LIMIT]
+else:
+    ids_to_download = object_ids
+
+for object_id in ids_to_download:
+
+    record_params = {
+
+        "where": f"OBJECTID = {object_id}",
+        "outFields": "*",
+        "returnGeometry": "true",
+        "f": "json"
+    }
+
+    try:
+        record_response = requests.get(url, params=record_params, timeout=60)
+        record_data = record_response.json()
+
+        attributes = record_data["features"][0]["attributes"]
+
+        all_crashes.append(attributes)
+
+        if len(all_crashes) % 500 == 0:
+            print(f"Downloaded {len(all_crashes)} crashes...")
+
+    except Exception as e:
+        print(f"Failed to download record for OBJECTID {object_id}: {e}")
+        failed_downloads.append(object_id)
+
+print(f"Crashes downloaded: {len(all_crashes):,}")
+print(f"Failed downloads: {len(failed_downloads):,}")
+
+# ==========================================
+# CREATE DATAFRAME
+# ==========================================
+
+df = pd.DataFrame(all_crashes)
+
+# ========================================
+# EXPORT CSV
+# ========================================
+
+df.to_csv(
+    "Data/florida_crashes_raw_2022.csv",
+    index=False     
+)
+
+print("=" * 50)
+print("Download Complete")
+print(f"Successful: {len(all_crashes):,}")
+print(f"Failed: {len(failed_downloads):,}")
+print("CSV saved successfully.")
+print("=" * 50)
